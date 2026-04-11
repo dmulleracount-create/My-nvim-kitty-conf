@@ -1,0 +1,48 @@
+return {
+  "lewis6991/gitsigns.nvim",
+  event = { "BufReadPre", "BufNewFile" },
+  opts = {
+    signs = {
+      add = { text = "│" },
+      change = { text = "│" },
+      delete = { text = "_" },
+      topdelete = { text = "‾" },
+      changedelete = { text = "~" },
+      untracked = { text = "┆" },
+    },
+    signcolumn = true,
+    numhl = false,
+    linehl = false,
+    word_diff = false,
+    watch_gitdir = {
+      interval = 1000,
+      follow_files = true,
+    },
+    attach_to_untracked = true,
+    current_line_blame = false,
+    current_line_blame_opts = {
+      virt_text = true,
+      virt_text_pos = "eol",
+      delay = 1000,
+    },
+    on_attach = function(buffer)
+      local gs = package.loaded.gitsigns
+
+      local function map(mode, key, func, desc)
+        vim.keymap.set(mode, key, func, { buffer = buffer, desc = desc })
+      end
+
+      map("n", "]h", gs.next_hunk, "Next Hunk")
+      map("n", "[h", gs.prev_hunk, "Prev Hunk")
+      map({ "n", "v" }, "<leader>ghs", ":Gitsigns stage_hunk<CR>", "Stage Hunk")
+      map({ "n", "v" }, "<leader> ghr", ":Gitsigns reset_hunk<CR>", "Reset Hunk")
+      map("n", "<leader>ghu", gs.undo_stage_hunk, "Undo Stage Hunk")
+      map("n", "<leader>ghp", gs.preview_hunk, "Preview Hunk")
+      map("n", "<leader>ghb", function() gs.blame_line({ full = true }) end, "Blame Line")
+      map("n", "<leader>ghd", gs.diffthis, "Diff This")
+      map("n", "<leader>ghD", function() gs.diffthis("~") end, "Diff This ~")
+      map("n", "<leader>ghtb", gs.toggle_current_line_blame, "Toggle Line Blame")
+      map("n", "<leader>ghd", gs.toggle_deleted, "Toggle Deleted")
+    end,
+  },
+}
