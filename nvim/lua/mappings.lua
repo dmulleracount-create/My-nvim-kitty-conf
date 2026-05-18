@@ -5,7 +5,6 @@ map("n", "<leader>s", ":split<CR>", { noremap = true, silent = true })
 map("n", "<leader>v", ":vsplit<CR>", { noremap = true, silent = true })
 map("n", "<leader>lt", ":terminal<CR>A", { noremap = true, silent = true })
 map("n", "<leader>q", ":quit!<CR>", { noremap = true, silent = true })
-map("n", "<leader>x", ":qall!<CR>", { noremap = true, silent = true })
 map("n", "-", ":source %<CR>", { noremap = true, silent = true })
 map("n", "w", ":SaveOrPrompt<CR>")
 map("n", "<Tab>", "<C-w>w<CR>", { noremap = true, silent = true })
@@ -17,9 +16,9 @@ map("n", "<S-p>", "o<Esc>", { noremap = true, silent = true })
 map({"n", "i"}, "<C-v>", "<Esc>:vsplit<CR>", { noremap = true, silent = true })
 map({"n", "i"}, "<C-z>", "<Esc>:undo<CR>", { noremap = true, silent = true })
 map({"n", "i"}, "<C-q>", "<Esc>:quit!<CR>", { noremap = true, silent = true })
-map({"n", "i"}, "<C-d>", "<Esc>yy<Esc>p", { noremap = true, silent = true })
+map("n", "<C-d>", "<Esc>yy<Esc>p", { noremap = true, silent = true })
 map({"n", "i"}, "<C-x>", "<Esc>:qall!<CR>", { noremap = true, silent = true })
-map({"n", "i"}, "<C-a>", "<Esc>ggVG", { noremap = true, silent = true })
+map("n", "<C-a>", "<Esc>ggVG", { noremap = true, silent = true })
 map("n", "m", "5l", { noremap = true, silent = true })
 map("n", "n", "5h", { noremap = true, silent = true })
 map({"n", "i"}, "<C-S-Right>", "<C-w>>", { noremap = true, silent = true })
@@ -37,7 +36,7 @@ map({"i", "n"}, "<C-;>", "<Esc>$a;<CR>", { noremap = true, silent = true})
 map("n", "<S-q>", ":bp<CR>", { noremap = true, silent = true})
 map("t", "<Esc>", "<C-\\><C-n>", { noremap = true, silent = true})
 map("n", "<C-n>", ":noh<CR>", { noremap = true, silent = true})
-
+map("i", "<C-$>", "<Esc>$a", {})
 
 
 
@@ -116,9 +115,9 @@ vim.api.nvim_create_user_command('SaveOrPrompt', function()
     if vim.bo.buftype ~= '' then return end
     local bufname = vim.api.nvim_buf_get_name(0)
     if bufname == '' then
-        local filename = vim.fn.input('Enter filename: ')
-        if filename ~= '' then
-            vim.cmd('w ' .. filename)
+        if _G.open_input_creator_global then
+            _G.open_input_creator_global()
+            vim.api.nvim_feedkeys("", "n", false)
         end
     else
         vim.cmd('w')

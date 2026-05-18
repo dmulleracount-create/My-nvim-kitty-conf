@@ -23,7 +23,12 @@ local function open_explorer()
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
+  local start = vim.loop.hrtime()
   local files = vim.fn.globpath(vim.fn.getcwd(), "**/*", true, true)
+  local elapsed = (vim.loop.hrtime() - start) / 1e9
+  if elapsed > 1 then
+     vim.api.nvim_echo({{"Demasiados archivos", "WarningMsg"}}, false, {})
+  end
   files = vim.tbl_filter(function(f) return vim.fn.isdirectory(f) == 0 end, files)
   for i, f in ipairs(files) do files[i] = vim.fn.fnamemodify(f, ":.") end
 

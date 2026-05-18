@@ -8,8 +8,6 @@ local function run_terminal()
     relative = "editor", width = tw, height = th,
     row = vim.o.lines - th - 5, col = vim.o.columns - tw - 2,
     style = "minimal", border = "single",
-    title = { { "   Terminal ", "MiniDirTitle" } },
-    title_pos = "center"
   })
   _G.term_float_win = win
   _G.last_float_win = win

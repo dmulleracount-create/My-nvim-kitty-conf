@@ -28,8 +28,19 @@ return {
          return col and (col - 1) or 0
       end
 
+      -- Función auxiliar para partir un texto largo en una tabla de trozos (chunks)
+      local function chunk_text(text, limit)
+         local chunks = {}
+         local i = 1
+         while i <= #text do
+            table.insert(chunks, text:sub(i, i + limit - 1))
+            i = i + limit
+         end
+         return chunks
+      end
+
       -- =======================================================================
-      -- 2. SECCIÓN TO-DO
+      -- 2. SECCIÓN TO-DO (CON DETECCIÓN DE TAREAS LARGAS Y MULTILÍNEA)
       -- =======================================================================
       
       local todo_section = {
@@ -39,20 +50,16 @@ return {
          name = "todo_custom",
          
          bindings = {
-            -- line es 1-indexed relativo al contenido de la sección
             ["<CR>"] = function(line)
                local item = _G.todo_line_map[line]
                
                if item then
-                  -- 1. Lo marcamos como hecho visualmente primero
                   item.done = true
                   pcall(require("sidebar-nvim").update) 
                   
-                  -- 2. Esperamos un instante para que el usuario vea el check antes de borrarlo
                   vim.defer_fn(function()
                      if _G.todos then
                         for i, t in ipairs(_G.todos) do
-                           -- Comparamos por el texto de la tarea (o id si tuvieses) para evitar fallos de referencia
                            if t.task == item.task and t.cat == item.cat then
                               table.remove(_G.todos, i)
                               break
@@ -61,7 +68,6 @@ return {
                         if _G.save_todos then _G.save_todos(_G.todos) end
                      end
                      
-                     -- 3. Actualizamos la UI en el thread principal de Neovim
                      vim.schedule(function()
                         pcall(require("sidebar-nvim").update)
                      end)
@@ -116,6 +122,10 @@ return {
                      table.insert(groups[cat], t)
                   end
                   
+                  local target_width = 35 
+                  local right_margin = 2
+                  local usable_width = target_width - right_margin -- 33 caracteres reales libres
+                  
                   for _, cat in ipairs(ordered_cats) do
                      local items = groups[cat]
                      table.insert(result.lines, "   " .. cat)
@@ -123,9 +133,51 @@ return {
                      
                      for _, item in ipairs(items) do
                         local icon = item.done and "󰄵" or "󰄱"
-                        table.insert(result.lines, string.format("      %s %s", icon, item.task))
-                        _G.todo_line_map[#result.lines] = item
-                        table.insert(result.hl, { item.current and "SidebarBlue" or "Comment", #result.lines - 1, 0, -1 })
+                        local prefix_text = string.format("      %s ", icon)
+                        local date_str = (item.date and item.date ~= "") and item.date or ""
+                        
+                        -- Calculamos cuántos caracteres quedan estrictamente para el texto de la tarea en la primera línea
+                        -- Espacio total (33) - Prefijo ("      󰄱 ") - Fecha (" 20-5-26" si existe)
+                        local date_space = (date_str ~= "") and (#date_str + 1) or 0
+                        local max_task_len_first_line = usable_width - #prefix_text - date_space
+                        
+                        if #item.task <= max_task_len_first_line then
+                           -- CASO 1: Cabe perfectamente en una sola línea
+                           local left_text = prefix_text .. item.task
+                           local display_text = left_text
+                           if date_str ~= "" then
+                              local padding_len = usable_width - #left_text - #date_str
+                              display_text = left_text .. string.rep(" ", padding_len) .. date_str
+                           end
+                           
+                           table.insert(result.lines, display_text)
+                           _G.todo_line_map[#result.lines] = item
+                           table.insert(result.hl, { item.current and "SidebarBlue" or "Comment", #result.lines - 1, 0, -1 })
+                        else
+                           -- CASO 2: La tarea es demasiado larga. Priorizamos la fecha arriba y troceamos el texto.
+                           local first_chunk = item.task:sub(1, max_task_len_first_line)
+                           local remaining_text = item.task:sub(max_task_len_first_line + 1)
+                           
+                           -- Renderizamos primera línea (Prefijo + Trozo 1 + Espacios sobrantes + Fecha al final)
+                           local left_text = prefix_text .. first_chunk
+                           local padding_len = usable_width - #left_text - #date_str
+                           local first_line_display = left_text .. string.rep(" ", padding_len) .. date_str
+                           
+                           table.insert(result.lines, first_line_display)
+                           _G.todo_line_map[#result.lines] = item -- Mapeamos la primera línea para poder interactuar
+                           table.insert(result.hl, { item.current and "SidebarBlue" or "Comment", #result.lines - 1, 0, -1 })
+                           
+                            -- Troceamos el resto del texto con el mismo ancho disponible que la primera línea
+                            local sub_line_prefix = string.rep(" ", #prefix_text)
+                            local max_sub_task_len = max_task_len_first_line
+                           
+                           local extra_chunks = chunk_text(remaining_text, max_sub_task_len)
+                           for _, chunk in ipairs(extra_chunks) do
+                              table.insert(result.lines, sub_line_prefix .. chunk)
+                              _G.todo_line_map[#result.lines] = item -- Mapeamos también las subsecuentes por comodidad
+                              table.insert(result.hl, { item.current and "SidebarBlue" or "Comment", #result.lines - 1, 0, -1 })
+                           end
+                        end
                      end
                   end
                end
@@ -326,9 +378,11 @@ return {
        end
 
        local orig_c = files.bindings["c"]
-       local loclist = upval(orig_c, "loclist")
-       local open_dirs = upval(orig_c, "open_directories")
-       local create_file_fn = upval(orig_c, "create_file")
+        local orig_d = files.bindings["d"]
+        local orig_r = files.bindings["r"]
+        local loclist = upval(orig_c, "loclist")
+        local open_dirs = upval(orig_c, "open_directories")
+        local create_file_fn = upval(orig_c, "create_file")
 
        files.bindings["c"] = function(line)
           local location = loclist:get_location_at(line)
@@ -374,9 +428,46 @@ return {
           pcall(require("sidebar-nvim").update)
        end
 
-       -- =======================================================================
-       -- 6. COMPORTAMIENTO Y BLOQUEOS
-       -- =======================================================================
+        files.bindings["d"] = function(line)
+           local location = loclist:get_location_at(line)
+           if location == nil then return end
+
+           require("input-remove").confirm_delete({
+               name = location.node.name,
+               label = "",
+               on_confirm = function()
+                 vim.fn.delete(location.node.path, "rf")
+                 vim.schedule(function() pcall(require("sidebar-nvim").update) end)
+              end,
+           })
+        end
+
+        files.bindings["r"] = function(line)
+           local location = loclist:get_location_at(line)
+           if location == nil then return end
+
+           require("input-rename").open_rename({
+               direct = true,
+               current_name = location.node.name,
+               label = "",
+               on_rename = function(new_name)
+                 local dest = location.node.parent .. "/" .. new_name
+                 os.rename(location.node.path, dest)
+                 vim.schedule(function() pcall(require("sidebar-nvim").update) end)
+              end,
+           })
+        end
+
+        vim.keymap.set("n", "<C-a>", function()
+           if _G.open_input_creator_global then
+              _G.open_input_creator_global()
+              pcall(vim.api.nvim_feedkeys, "", "n", false)
+           end
+        end, { buffer = true, nowait = true })
+
+        -- =======================================================================
+        -- 6. COMPORTAMIENTO Y BLOQUEOS
+        -- =======================================================================
 
        local sb_group = vim.api.nvim_create_augroup("SidebarBehavior", { clear = true })
 
@@ -394,10 +485,13 @@ return {
             elseif last >= t_start and line < t_start then new_line = t_start end
 
             local new_col = get_first_char_col(new_line)
-            if line ~= new_line or col ~= new_col then
-               vim.api.nvim_win_set_cursor(0, { new_line, new_col })
-            end
-            vim.b.last_sidebar_line = new_line
+             local last_line = vim.api.nvim_buf_line_count(0)
+             new_line = math.max(1, math.min(new_line, last_line))
+             new_col = math.min(new_col, #(vim.api.nvim_buf_get_lines(0, new_line - 1, new_line, false)[1] or ""))
+             if line ~= new_line or col ~= new_col then
+                vim.api.nvim_win_set_cursor(0, { new_line, new_col })
+             end
+             vim.b.last_sidebar_line = new_line
          end,
       })
 
@@ -407,6 +501,14 @@ return {
               if vim.bo.filetype ~= "SidebarNvim" then return end
               if vim.api.nvim_win_get_config(0).relative ~= "" then return end
               vim.cmd("silent! setlocal cursorline winhighlight=CursorLine:CursorLine")
+           end,
+        })
+
+        vim.api.nvim_create_autocmd("WinLeave", {
+           group = sb_group,
+           callback = function()
+              if vim.bo.filetype ~= "SidebarNvim" then return end
+              vim.cmd("silent! setlocal nocursorline")
            end,
         })
 

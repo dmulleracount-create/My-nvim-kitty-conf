@@ -40,33 +40,125 @@ vim.api.nvim_set_hl(0, 'SidebarBlue', { fg = '#7aa2f7', bold = true })
 vim.api.nvim_set_hl(0, 'SidebarNvimDirectory', { fg = '#7aa2f7', bold = true })
 vim.api.nvim_set_hl(0, 'SidebarNvimFile', { fg = '#c0caf5' })
 
--- Errores de diagnóstico en blanco
-vim.api.nvim_set_hl(0, 'DiagnosticError', { fg = '#FFFFFF' })
-vim.api.nvim_set_hl(0, 'DiagnosticSignError', { fg = '#FFFFFF' })
-vim.api.nvim_set_hl(0, 'DiagnosticVirtualTextError', { fg = '#FFFFFF' })
-vim.api.nvim_set_hl(0, 'DiagnosticUnderlineError', { undercurl = true, sp = '#FFFFFF' })
+-- Diagnósticos: número de línea coloreado, sin letras, texto virtual al final
+local diag_colors = {
+   error = '#f7768e',
+   warn  = '#e0af68',
+   info  = '#7dcfff',
+   hint  = '#565f89',
+}
+
+vim.diagnostic.config({
+   signs = {
+      text = {
+         [vim.diagnostic.severity.ERROR] = ' ',
+         [vim.diagnostic.severity.WARN]  = ' ',
+         [vim.diagnostic.severity.INFO]  = ' ',
+         [vim.diagnostic.severity.HINT]  = ' ',
+      },
+      numhl = {
+         [vim.diagnostic.severity.ERROR] = 'DiagNumhlError',
+         [vim.diagnostic.severity.WARN]  = 'DiagNumhlWarn',
+         [vim.diagnostic.severity.INFO]  = 'DiagNumhlInfo',
+         [vim.diagnostic.severity.HINT]  = 'DiagNumhlHint',
+      },
+   },
+   virtual_text = false,
+   underline = false,
+   update_in_insert = false,
+   severity_sort = true,
+})
+
+local function filter_unused(diagnostics)
+   local unused_words = { "unused", "no utilizado", "no usado", "never used", "is not used" }
+   local r = {}
+   for _, d in ipairs(diagnostics) do
+      local skip = false
+      for _, w in ipairs(unused_words) do
+         if d.message:lower():find(w, 1, true) then skip = true; break end
+      end
+      if not skip then table.insert(r, d) end
+   end
+   return r
+end
+
+if vim.diagnostic.handlers then
+   local handler_names = { "signs", "virtual_text", "underline" }
+   for _, name in ipairs(handler_names) do
+      local h = vim.diagnostic.handlers[name]
+      if h and h.show then
+         local orig = h.show
+         h.show = function(namespace, bufnr, diagnostics, opts)
+            orig(namespace, bufnr, filter_unused(diagnostics), opts)
+         end
+      end
+   end
+end
+
+local diag_group = vim.api.nvim_create_augroup('DiagInsert', { clear = true })
+vim.api.nvim_create_autocmd('InsertLeave', {
+   group = diag_group,
+   callback = function()
+      vim.diagnostic.config({ virtual_text = true, underline = true })
+   end,
+})
+
+local function update_diagnostic_hl()
+   local err = vim.api.nvim_get_hl(0, { name = 'DiagnosticSignError' })
+   local warn = vim.api.nvim_get_hl(0, { name = 'DiagnosticSignWarn' })
+   vim.api.nvim_set_hl(0, 'DiagNumhlError', { fg = err.fg or diag_colors.error })
+   vim.api.nvim_set_hl(0, 'DiagNumhlWarn',  { fg = warn.fg or diag_colors.warn })
+   vim.api.nvim_set_hl(0, 'DiagNumhlInfo',  { fg = diag_colors.info })
+   vim.api.nvim_set_hl(0, 'DiagNumhlHint',  { fg = diag_colors.hint })
+end
+update_diagnostic_hl()
+
+-- Bold solo en línea actual si tiene diagnóstico
+local default_clnr_fg = '#c0caf5'
+local function update_cursorline_diag()
+   local lnum = vim.api.nvim_win_get_cursor(0)[1] - 1
+   local diagnostics = vim.diagnostic.get(0, { lnum = lnum })
+   local severity = nil
+   for _, d in ipairs(diagnostics) do
+      if severity == nil or d.severity < severity then
+         severity = d.severity
+      end
+   end
+   local fg = default_clnr_fg
+   if severity == vim.diagnostic.severity.ERROR then
+      fg = diag_colors.error
+   elseif severity == vim.diagnostic.severity.WARN then
+      fg = diag_colors.warn
+   elseif severity == vim.diagnostic.severity.INFO then
+      fg = diag_colors.info
+   end
+   vim.api.nvim_set_hl(0, 'CursorLineNr', { fg = fg, bold = true })
+end
 
 -- Separadores y WinBar
 vim.api.nvim_set_hl(0, 'WinSeparator', { fg = '#1a1b26', bg = '#1a1b26'})
 vim.cmd('highlight ErrorMsg guifg=#565f89 ctermfg=0')
 
 local function apply_bufferline_hl()
-  vim.api.nvim_set_hl(0, 'WinSeparator',               { fg = '#1a1b26', bg = '#1a1b26' })
-  vim.api.nvim_set_hl(0, 'SidebarNvimFile',            { fg = '#c0caf5' })
-  vim.api.nvim_set_hl(0, 'SidebarNvimDirectory',       { fg = '#7aa2f7', bold = true })
-  vim.api.nvim_set_hl(0, "BufferLineSeparator",         { fg = "#1a1b26", bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "BufferLineSeparatorVisible",  { fg = "#1a1b26", bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "BufferLineSeparatorSelected", { fg = "#1a1b26", bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "BufferLineTab",               { fg = "#565f89", bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "BufferLineBackground",        { fg = "#565f89", bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "BufferLineBufferVisible",     { fg = "#565f89", bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "TabLineFill",                 { bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "TabLine",                     { bg = "#1a1b26" })
-  vim.api.nvim_set_hl(0, "CursorLineNr",                { fg = "#c0caf5", bold = true })
+   update_diagnostic_hl()
+   vim.api.nvim_set_hl(0, 'WinSeparator',               { fg = '#1a1b26', bg = '#1a1b26' })
+   vim.api.nvim_set_hl(0, 'SidebarNvimFile',            { fg = '#c0caf5' })
+   vim.api.nvim_set_hl(0, 'SidebarNvimDirectory',       { fg = '#7aa2f7', bold = true })
+   vim.api.nvim_set_hl(0, "BufferLineSeparator",         { fg = "#1a1b26", bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "BufferLineSeparatorVisible",  { fg = "#1a1b26", bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "BufferLineSeparatorSelected", { fg = "#1a1b26", bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "BufferLineTab",               { fg = "#565f89", bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "BufferLineBackground",        { fg = "#565f89", bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "BufferLineBufferVisible",     { fg = "#565f89", bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "TabLineFill",                 { bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "TabLine",                     { bg = "#1a1b26" })
+   vim.api.nvim_set_hl(0, "CursorLineNr",                { fg = "#c0caf5", bold = true })
 end
 
 vim.api.nvim_create_autocmd("ColorScheme", { pattern = "*", callback = apply_bufferline_hl })
 vim.api.nvim_create_autocmd("VimEnter",    { callback = apply_bufferline_hl })
+
+vim.api.nvim_create_autocmd("CursorMoved", { callback = update_cursorline_diag })
 
 -- =============================================================================
 -- 3. COMPORTAMIENTO DEL SIDEBAR (BLOQUEOS Y CURSOR)
@@ -161,6 +253,8 @@ local ignore_filetypes = {
   ["toggleterm"]   = true,
   ["alpha"]        = true,
   ["notanv"]       = true,
+  ["zsh"]          = true,
+  ["terminal"]          = true,
 }
 
 local function set_winbar()
@@ -206,10 +300,14 @@ require("term-flo")
 require("notes-flo")
 require("input-create")
 require("input-remove")
+require("input-rename")
+require("api-flo")
+require("templates-flo")
+require("summon")
 
 -- Navegación de buffers (ignorará el sidebar porque buflisted = false)
 vim.keymap.set("n", "<Tab>", "<C-w>w", { silent = true })
-vim.keymap.set("n", "<S-Tab>", ":bprev<CR>", { silent = true })
+vim.keymap.set("n", "<S-Tab>", ":bnext<CR>", { silent = true })
 
 -- Control de Sidebar
 vim.keymap.set({ "n", "v" }, "<C-s>", ":SidebarNvimToggle<CR>", { silent = true })
@@ -234,3 +332,4 @@ vim.opt.fillchars = {
   diff      = '╱',
   msgsep    = '‾',
 }
+
